@@ -8,7 +8,7 @@ The application automatically releases ticket locks when an agent disconnects, p
 
 # 📸 Screenshot
 
-![img alt](https://github.com/Harshit-700/RapidDispatch-Live-Ops/blob/a3aff378c67ffad8dc3187c51bbfcae7d9ea54a5/Screenshot%20(471).png)
+![img alt](https://github.com/Harshit-700/RapidDispatch-Live-Ops/blob/16ee333189f862eae3700010c55dedb6a4a3ce15/Screenshot%20(471).png)
 
 
 ---

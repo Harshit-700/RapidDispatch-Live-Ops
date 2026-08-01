@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Ticket Lock Demo</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+  h1 { font-size: 20px; }
+  .row { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+  input { padding: 6px 8px; }
+  button { padding: 6px 12px; cursor: pointer; }
+  #log { background: #111; color: #0f0; padding: 12px; height: 260px; overflow-y: auto; font-family: monospace; font-size: 12px; border-radius: 6px; }
+  #tickets { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 16px 0; }
+  .ticket { border: 2px solid #ccc; border-radius: 8px; padding: 10px; text-align: center; }
+  .ticket.locked { border-color: #d33; background: #fee; }
+  .ticket.mine { border-color: #2a7; background: #efe; }
+  .note { color: #666; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h2><b>Ticket Lock Demo</b><i>(open this in two tabs)</i></h2>
+  <p class="note">
+    Simulate the "ghost disconnect" by locking a ticket in one tab, then just
+    closing that tab (not clicking unlock) — the other tab should see it
+    auto-release within a second.
+  </p>
+
+  <div class="row">
+    <label>Agent name: <input id="name" value="Agent A" /></label>
+    <button onclick="join()">Join dashboard</button>
+  </div>
+
+  <div id="tickets"></div>
+
+  <h3>Log</h3>
+  <div id="log"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const TICKET_IDS = ['TCK-101', 'TCK-102', 'TCK-103', 'TCK-104'];
+    let socket;
+    let locks = {};
+
+    function log(msg) {
+      const el = document.getElementById('log');
+      const line = document.createElement('div');
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function join() {
+      if (socket) socket.disconnect();
+      socket = io();
+      const userName = document.getElementById('name').value || 'Agent';
+
+      socket.on('connect', () => {
+        log(`connected as ${socket.id}`);
+        socket.emit('join_dashboard', { userName, userId: userName }, (res) => {
+          locks = res.locks || {};
+          render();
+          log(`joined dashboard, ${Object.keys(locks).length} ticket(s) currently locked`);
+        });
+      });
+
+      socket.on('ticket_locked', ({ ticketId, lock }) => {
+        locks[ticketId] = lock;
+        render();
+        log(`🔒 ${ticketId} locked by ${lock.userName}`);
+      });
+
+      socket.on('ticket_unlocked', ({ ticketId }) => {
+        delete locks[ticketId];
+        render();
+        log(`🔓 ${ticketId} manually released`);
+      });
+
+      socket.on('tickets_released', ({ ticketIds, reason }) => {
+        ticketIds.forEach((id) => delete locks[id]);
+        render();
+        log(`👻 ghost release: ${ticketIds.join(', ')} (${reason})`);
+      });
+
+      socket.on('lock_rejected', ({ ticketId, lockedBy }) => {
+        log(`❌ could not lock ${ticketId}, already held by ${lockedBy.userName}`);
+      });
+
+      socket.on('disconnect', () => log('disconnected'));
+    }
+
+    function lockTicket(ticketId) {
+      socket.emit('lock_ticket', { ticketId }, (res) => {
+        if (!res.ok) log(`lock failed: ${res.error}`);
+      });
+    }
+
+    function unlockTicket(ticketId) {
+      socket.emit('unlock_ticket', { ticketId }, (res) => {
+        if (!res.ok) log(`unlock failed: ${res.error}`);
+      });
+    }
+
+    function render() {
+      const container = document.getElementById('tickets');
+      container.innerHTML = '';
+      TICKET_IDS.forEach((id) => {
+        const lock = locks[id];
+        const div = document.createElement('div');
+        div.className = 'ticket' + (lock ? (lock.socketId === socket?.id ? ' mine' : ' locked') : '');
+        div.innerHTML = `
+          <strong>${id}</strong><br/>
+          ${lock ? `Locked by ${lock.userName}` : 'Free'}<br/>
+          ${lock
+            ? (lock.socketId === socket?.id ? `<button onclick="unlockTicket('${id}')">Unlock</button>` : '')
+            : `<button onclick="lockTicket('${id}')">Lock</button>`}
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>
